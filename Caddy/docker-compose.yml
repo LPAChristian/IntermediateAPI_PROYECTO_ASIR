@@ -3,22 +3,26 @@ services:
     image: lucaslorentz/caddy-docker-proxy:2.8.9
     container_name: caddy
     restart: unless-stopped
+    network_mode: host
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - caddy_data:/data           # certificados
       - caddy_config:/config       # config generada
+      - $PWD/conf:/etc/caddy
+      - $PWD/site:/srv
 
     environment:
       - CADDY_INGRESS_NETWORKS=caddy_net  # dónde buscar backends
 
     # Publica HTTPS / HTTP al exterior
-    ports:
-      - "80:80"
-      - "443:443"
+    # ports:
+    #   - "80:80"
+    #   - "443:443"
 
-    networks:
-      - caddy_net
+    labels:
+      caddy_0: "https://api.quiere.cafe"
+      caddy_0.reverse_proxy: "localhost:8000"
 
 networks:
   caddy_net:
