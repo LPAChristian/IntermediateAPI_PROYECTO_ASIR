@@ -160,9 +160,86 @@ class DockerManager:
         )
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # Aquí empieza el siguiente stack
-    # Here starts the next stack
+    # Stack PHP con filebrowser
+    # PHP stack with filebrowser
+    def deploy_php_with_filebrowser(
+        self, user: str, project: str, zip_path: str | None, admin_pass: str = "admin123"
+    ):
+        """
+        Crea el stack PHP con filebrowser en la carpeta del usuario.
+        Creates the PHP stack with filebrowser in the user's folder.
+        """
+        target = self._ensure_path(user, project)
 
+        # 0) Descomprimir el zip
+        if zip_path:
+            print(f"Extracting {zip_path} → {target/'data'}")
+            with zipfile.ZipFile(zip_path) as zf:
+                self._safe_extract(zf, target / "data")
+            os.remove(zip_path)  # limpia tmp | Clear tmp
+
+        # 1) Inicializar DB
+        # Initialize DB
+        self._run_once_container(
+            "filebrowser/filebrowser",
+            ["config", "init", "--database", "/srv/filebrowser.db"],
+            {str(target / "filebrowser_data"): {"bind": "/srv", "mode": "rw"}},
+        )
+
+        # 2) Crear usuario admin
+        # Create admin user
+        self._run_once_container(
+            "filebrowser/filebrowser",
+            [
+                "users",
+                "add",
+                "admin",
+                admin_pass,
+                "--database",
+                "/srv/filebrowser.db",
+                "--perm.admin",
+            ],
+            {str(target / "filebrowser_data"): {"bind": "/srv", "mode": "rw"}},
+        )
+
+        # 3) Escribir docker-compose.yml para PHP
+        # Write docker-compose.yml for PHP
+        compose_text = textwrap.dedent(f"""
+        services:
+          php-apache:
+            image: php:8.3-apache
+            networks:
+              - caddy_net
+            volumes:
+              - "./data:/var/www/html"
+            labels:
+              caddy: "{project}.quiere.cafe"
+              caddy.reverse_proxy: "{{{{upstreams 80}}}}"
+            restart: always
+
+          filebrowser:
+            image: filebrowser/filebrowser:latest
+            networks:
+              - caddy_net
+            labels:
+              caddy: "fb-{project}.quiere.cafe"
+              caddy.reverse_proxy: "{{{{upstreams 80}}}}"
+            volumes:
+              - "./filebrowser_data/filebrowser.db:/database.db"
+              - "./data:/srv"
+            command: --database /database.db
+            restart: always
+
+        networks:
+          caddy_net:
+            external: true
+        """)
+        (target / "docker-compose.yml").write_text(compose_text)
+
+        # 4) Levantar servicios con docker compose v2
+        subprocess.run(
+            ["docker", "compose", "up", "-d"], cwd=target, check=True
+        )
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # ---------- punto de entrada principal ----------
@@ -181,8 +258,8 @@ class DockerManager:
 
         if wtype == "Estatico":
             self.deploy_static_with_filebrowser(user, pname, payload.get("zip_path"))
-        #elif wtype == "PHP":
-            #self.deploy_php_with_caddy(user, pname, payload.get("zip_path"))
+        elif wtype == "PHP":
+            self.deploy_php_with_filebrowser(user, pname, payload.get("zip_path"))
         else:
             # Esqueleto para futuros tipos
             # Skeleton for future types

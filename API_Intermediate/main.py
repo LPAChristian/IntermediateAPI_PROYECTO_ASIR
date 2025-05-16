@@ -24,10 +24,9 @@ class DockerWebtype(str, Enum):
     ESTATICO = "Estatico"
     PHP = "PHP"
     LARAVEL = "Laravel"
-    REACT_VITE = "React/Vite"
+    REACT_VITE = "React"
     NODE = "Node"
     NEXT = "Next"
-    VITE = "Vite"
     WORDPRESS = "WordPress"
     MYSQL = "MySQL"
     MARIADB = "MariaDB"
@@ -129,12 +128,12 @@ async def create_docker(
     userid: str = Form(...),
     Webtype: DockerWebtype = Form(...),
     Webname: str = Form(...),
-    userfile: Optional[UploadFile] = File(None)
+    userfile: UploadFile = File(None)
 ):
     file_info = None
     zip_path: str | None = None
 
-    if userfile:
+    if userfile and userfile.filename:
         # guarda el contenido en un tmp seguro
         suffix = pathlib.Path(userfile.filename).suffix.lower()
         if suffix != ".zip":
